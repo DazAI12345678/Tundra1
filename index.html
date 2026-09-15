@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tundra Biome — Mobile Pre-Beta</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; width: 100%;
+    touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; touch-action: none; }
+  * { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; box-sizing: border-box; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #eaf6f8; }
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+    margin: -3px 0 0 -3px; background: rgba(255,255,255,0.7); border-radius: 50%;
+  }
+
+  #bars-panel {
+    position: absolute; top: env(safe-area-inset-top, 10px); left: 10px; width: 46vw; max-width: 190px;
+    background: rgba(10,16,22,0.75); border: 1px solid #33414d; border-radius: 8px; padding: 6px 8px;
+  }
+  .bar-label { font-size: 0.56rem; color: #a9c2d1; display:flex; justify-content: space-between; margin-bottom:2px;}
+  .bar-bg { width:100%; height:8px; background:#181f26; border-radius:5px; overflow:hidden; margin-bottom: 5px; }
+  #bh-fill { height:100%; width:100%; background: linear-gradient(90deg,#e03c3c,#f0a63a,#4fd18a); transition: width .3s ease; }
+  #health-fill { height:100%; width:100%; background: linear-gradient(90deg,#8a2a2a,#c94a4a,#e87a7a); transition: width .3s ease; }
+  #scent-badge {
+    display: none; font-size: 0.54rem; color: #ffb37a; margin-top: 3px;
+    background: rgba(224,120,60,0.15); border: 1px solid #a85c2a; border-radius: 5px; padding: 2px 5px;
+  }
+
+  #items-panel {
+    position: absolute; top: env(safe-area-inset-top, 10px); right: 10px; width: 34vw; max-width: 140px; text-align: right;
+    background: rgba(10,16,22,0.75); border: 1px solid #33414d; border-radius: 8px; padding: 6px 8px;
+    font-size: 0.6rem; color: #cfe0ea;
+  }
+
+  #objectives {
+    position: absolute; top: 76px; left: 10px; width: 46vw; max-width: 190px;
+    background: rgba(10,16,22,0.7); border: 1px solid #33414d; border-radius: 8px; padding: 6px 8px;
+    font-size: 0.54rem; color: #cfe0ea;
+  }
+  #objectives h4 { margin: 0 0 4px; font-size: 0.54rem; color: #8fa8b8; letter-spacing: 0.5px; }
+  #objectives div { display:flex; justify-content: space-between; padding: 1px 0; }
+  .obj-done { color: #4fd18a; }
+  .obj-dormant { color: #6f8291; }
+  .obj-carrying { color: #f0a63a; }
+
+  #progress-wrap {
+    position: absolute; bottom: 175px; left: 50%; transform: translateX(-50%);
+    width: 50vw; max-width: 200px; display: none;
+  }
+  #progress-bg { width:100%; height:8px; background:#181f26; border-radius:5px; overflow:hidden; border:1px solid #33414d;}
+  #progress-fill { height:100%; width:0%; background:#5c9ab8; }
+
+  #roar-banner {
+    position: absolute; top: env(safe-area-inset-top, 10px); left: 50%; transform: translateX(-50%);
+    background: rgba(224,60,60,0.3); border: 1px solid #e03c3c; color: #ffdada;
+    padding: 6px 14px; border-radius: 8px; font-size: 0.7rem; display: none; font-weight: 700;
+  }
+
+  #playdead-btn {
+    position: absolute; bottom: 220px; left: 50%; transform: translateX(-50%);
+    background: rgba(224,60,60,0.5); border: 2px solid #e03c3c; color: #fff;
+    padding: 12px 22px; border-radius: 10px; font-size: 0.8rem; font-weight: 700;
+    display: none; pointer-events: all;
+  }
+
+  #bear-status {
+    position: absolute; bottom: 195px; left: 50%; transform: translateX(-50%);
+    font-size: 0.58rem; color: #d9a0a0; display:none;
+  }
+
+  /* touch controls */
+  #joystick-zone { position: absolute; bottom: 0; left: 0; width: 42vw; height: 55vh; pointer-events: all; }
+  #joystick-base {
+    position: absolute; width: 84px; height: 84px; border-radius: 50%;
+    background: rgba(92,154,184,0.15); border: 2px solid rgba(92,154,184,0.5);
+    display: none; transform: translate(-50%,-50%);
+  }
+  #joystick-knob {
+    position: absolute; width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(92,154,184,0.55); border: 1px solid rgba(207,238,245,0.6);
+    top: 23px; left: 23px;
+  }
+  #look-zone { position: absolute; bottom: 0; right: 0; width: 58vw; height: 100vh; pointer-events: all; }
+
+  #action-buttons {
+    position: absolute; bottom: 26px; right: 12px; display: flex; flex-direction: column; gap: 9px;
+    pointer-events: all; z-index: 5;
+  }
+  .action-btn {
+    width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(92,154,184,0.25); border: 2px solid rgba(92,154,184,0.7);
+    color: #eaf6f8; font-size: 0.54rem; font-weight: 700; text-align: center;
+    display: flex; align-items: center; justify-content: center; line-height: 1.1;
+  }
+  .action-btn.pressed { background: rgba(92,154,184,0.55); }
+  #firecracker-btn { background: rgba(224,120,60,0.25); border-color: rgba(224,120,60,0.7); }
+  #firecracker-btn.pressed { background: rgba(224,120,60,0.55); }
+  #bandage-btn { background: rgba(79,209,138,0.2); border-color: rgba(79,209,138,0.6); }
+  #bandage-btn.pressed { background: rgba(79,209,138,0.5); }
+
+  #start-screen, #gameover-screen {
+    position: fixed; inset: 0; background: rgba(4,7,10,0.96);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #eaf6f8; text-align: center; padding: 22px; pointer-events: all; z-index: 20;
+  }
+  #gameover-screen { display: none; }
+  #start-screen h1, #gameover-screen h1 { font-size: 1.0rem; margin-bottom: 6px; }
+  #start-screen p, #gameover-screen p { font-size: 0.65rem; color: #a9c2d1; max-width: 300px; margin-bottom: 16px; line-height:1.55; }
+  .diff-row { display:flex; gap:6px; margin-bottom: 18px; flex-wrap: wrap; justify-content: center; }
+  .diff-btn {
+    padding: 8px 10px; font-size: 0.62rem; background:#141c24; border:1px solid #33414d;
+    color:#a9c2d1; border-radius:6px;
+  }
+  .diff-btn.active { background:#5c9ab8; color:#04141c; font-weight:700; border-color:#5c9ab8; }
+  #start-btn, #restart-btn {
+    background:#5c9ab8; color:#04141c; border:none; border-radius:8px; padding:12px 24px;
+    font-weight:700; font-size:0.78rem;
+  }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>🏔️ Tundra Biome — Mobile Pre-Beta</h1>
+  <p>Left thumb: drag to move. Right side: drag to look. Hold FIX to work a task — chopping wood is loud. If the bear roars, tap PLAY DEAD in time. FIRE throws a firecracker (2.5s fuse). HEAL uses a bandage.</p>
+  <div class="diff-row" id="diff-row">
+    <button class="diff-btn" data-diff="passive">Passive</button>
+    <button class="diff-btn" data-diff="easy">Easy</button>
+    <button class="diff-btn active" data-diff="medium">Medium</button>
+    <button class="diff-btn" data-diff="hard">Hard</button>
+    <button class="diff-btn" data-diff="ecoranger">Eco-Ranger</button>
+  </div>
+  <button id="start-btn">Enter Biome</button>
+</div>
+
+<div id="gameover-screen">
+  <h1 id="gameover-title">💀 Biome Collapsed</h1>
+  <p id="gameover-text">The ecosystem couldn't be sustained.</p>
+  <button id="restart-btn">Try Again</button>
+</div>
+
+<div id="hud">
+  <div id="crosshair"></div>
+
+  <div id="bars-panel">
+    <div class="bar-label"><span>BIOME</span><span id="bh-value">100%</span></div>
+    <div class="bar-bg"><div id="bh-fill"></div></div>
+    <div class="bar-label"><span>HEALTH</span><span id="health-value">100%</span></div>
+    <div class="bar-bg"><div id="health-fill"></div></div>
+    <div id="scent-badge">🩸 Scent trail active</div>
+  </div>
+
+  <div id="items-panel">
+    <div>🧨 <span id="firecracker-count">3</span></div>
+    <div>🩹 <span id="bandage-count">3</span></div>
+  </div>
+
+  <div id="objectives">
+    <h4>OBJECTIVES</h4>
+    <div id="obj-campfire"><span>Extinguish campfire</span><span>○</span></div>
+    <div id="obj-ice"><span>Break stream ice</span><span>○</span></div>
+    <div id="obj-wood"><span>Chop &amp; deliver firewood</span><span>○</span></div>
+    <div id="obj-resource"><span>Find resources (0/4)</span><span>○</span></div>
+  </div>
+
+  <div id="roar-banner">🐻 ROAR!</div>
+  <div id="bear-status"></div>
+  <div id="progress-wrap"><div id="progress-bg"><div id="progress-fill"></div></div></div>
+</div>
+
+<button id="playdead-btn">PLAY DEAD</button>
+
+<div id="joystick-zone"><div id="joystick-base"><div id="joystick-knob"></div></div></div>
+<div id="look-zone"></div>
+
+<div id="action-buttons">
+  <div class="action-btn" id="fix-btn">HOLD<br>FIX</div>
+  <div class="action-btn" id="firecracker-btn">FIRE<br>CRACKER</div>
+  <div class="action-btn" id="bandage-btn">HEAL</div>
+</div>
+
+<script>
+(function() {
+  const DIFFICULTY = {
+    passive:   { decay: 0.12, bearSpeed: 1.4, taskFail: 0.9, roarChance: 0.01, dormancy: [28,40], noiseBoost: 1.0 },
+    easy:      { decay: 0.25, bearSpeed: 1.9, taskFail: 1.4, roarChance: 0.02, dormancy: [22,32], noiseBoost: 1.2 },
+    medium:    { decay: 0.45, bearSpeed: 2.4, taskFail: 2.0, roarChance: 0.032, dormancy: [16,26], noiseBoost: 1.4 },
+    hard:      { decay: 0.75, bearSpeed: 3.1, taskFail: 2.9, roarChance: 0.05, dormancy: [10,18], noiseBoost: 1.7 },
+    ecoranger: { decay: 1.2,  bearSpeed: 4.0, taskFail: 4.0, roarChance: 0.075, dormancy: [6,12], noiseBoost: 2.1 },
+  };
+
+  let diffKey = "medium";
+  let d = DIFFICULTY[diffKey];
+
+  // ---------- AUDIO ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function noiseBurst({ freq=800, q=1, gain=0.25, duration=0.08, type="bandpass" }) {
+    if (!audioCtx) return;
+    const bufferSize = Math.max(1, Math.floor(audioCtx.sampleRate * duration));
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = type; filter.frequency.value = freq; filter.Q.value = q;
+    const g = audioCtx.createGain(); g.gain.value = gain;
+    src.connect(filter).connect(g).connect(audioCtx.destination);
+    src.start();
+  }
+  function tone({ freq=440, duration=0.12, gain=0.15, glide=0, type="sine" }) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if (glide) osc.frequency.linearRampToValueAtTime(freq+glide, audioCtx.currentTime+duration);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(gain, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+duration);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime+duration);
+  }
+  function playFootstepSnow() { ensureAudio(); noiseBurst({ freq: 700, q: 0.5, gain: 0.14, duration: 0.12, type:"lowpass" }); }
+  function playFootstepCobble() { ensureAudio(); noiseBurst({ freq: 1600, q: 2, gain: 0.14, duration: 0.05, type:"highpass" }); }
+  function playChop() { ensureAudio(); noiseBurst({ freq: 500, q: 3, gain: 0.3, duration: 0.1, type:"bandpass" }); tone({freq:180,duration:0.08,gain:0.08}); }
+  function playFireHiss() { ensureAudio(); noiseBurst({ freq: 2000, q: 1, gain: 0.15, duration: 0.3, type:"bandpass" }); }
+  function playWind() { ensureAudio(); noiseBurst({ freq: 300, q: 0.3, gain: 0.05, duration: 1.2, type:"lowpass" }); }
+  function playRoar() { ensureAudio(); tone({ freq: 90, duration: 0.9, gain: 0.22, glide: -30, type:"sawtooth" }); noiseBurst({ freq: 250, q:0.5, gain:0.2, duration:0.5, type:"lowpass" }); }
+  function playFuseTick() { ensureAudio(); tone({ freq: 1200, duration: 0.05, gain: 0.08 }); }
+  function playFirecrackerPop() { ensureAudio(); noiseBurst({ freq: 2600, q:1, gain:0.3, duration:0.15, type:"highpass" }); tone({freq:100,duration:0.2,gain:0.15,glide:-40}); }
+  function playHeal() { ensureAudio(); tone({ freq: 500, duration: 0.15, gain: 0.1, glide: 200 }); }
+  function playHurt() { ensureAudio(); noiseBurst({ freq: 400, q:1, gain:0.25, duration:0.2, type:"lowpass" }); }
+  function playTaskComplete() { ensureAudio(); tone({ freq: 520, duration: 0.12, gain: 0.1, glide: 180 }); setTimeout(()=>tone({freq:700,duration:0.15,gain:0.08,glide:100}),90); }
+  function playTaskBreak() { ensureAudio(); tone({ freq: 220, duration: 0.25, gain: 0.1, glide: -70 }); }
+  function playPickup() { ensureAudio(); tone({ freq: 780, duration: 0.12, gain: 0.1, glide: 250 }); }
+
+  // ---------- THREE SETUP ----------
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x8fa3ad);
+  scene.fog = new THREE.FogExp2(0x9db3bd, 0.014);
+
+  const camera = new THREE.PerspectiveCamera(78, window.innerWidth/window.innerHeight, 0.1, 500);
+  camera.position.set(0, 1.7, 85);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  const hemi = new THREE.HemisphereLight(0xc9d8dd, 0x3a4a52, 0.75);
+  scene.add(hemi);
+  const dirLight = new THREE.DirectionalLight(0xd8e4e8, 0.35);
+  dirLight.position.set(10, 30, -10);
+  scene.add(dirLight);
+
+  // ---------- ENVIRONMENT (same layout as desktop) ----------
+  const snowMat = new THREE.MeshLambertMaterial({ color: 0xe4ecef });
+  const snowFloor = new THREE.Mesh(new THREE.PlaneGeometry(160, 220), snowMat);
+  snowFloor.rotation.x = -Math.PI/2;
+  snowFloor.position.set(0, 0, -20);
+  scene.add(snowFloor);
+
+  const cobbleMat = new THREE.MeshLambertMaterial({ color: 0x5a5f66 });
+  const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(6, 50), cobbleMat);
+  mainPath.rotation.x = -Math.PI/2;
+  mainPath.position.set(0, 0.01, 60);
+  scene.add(mainPath);
+
+  const leftFork = new THREE.Mesh(new THREE.PlaneGeometry(5, 70), cobbleMat);
+  leftFork.rotation.x = -Math.PI/2;
+  leftFork.rotation.z = 0.38;
+  leftFork.position.set(-24, 0.01, -5);
+  scene.add(leftFork);
+
+  const rightFork = new THREE.Mesh(new THREE.PlaneGeometry(5, 70), cobbleMat);
+  rightFork.rotation.x = -Math.PI/2;
+  rightFork.rotation.z = -0.38;
+  rightFork.position.set(24, 0.01, -5);
+  scene.add(rightFork);
+
+  const lampPositions = [
+    [0,50],[0,25],[-10,5],[10,5],
+    [-20,-15],[-30,-35],[-38,-55],
+    [20,-15],[30,-35],[38,-55],
+  ];
+  const lanternLights = [];
+  lampPositions.forEach(([lx,lz]) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,3.2,6), new THREE.MeshLambertMaterial({color:0x2a2e33}));
+    pole.position.set(lx, 1.6, lz);
+    scene.add(pole);
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.28,8,8), new THREE.MeshBasicMaterial({color:0xffc266}));
+    lantern.position.set(lx, 3.1, lz);
+    scene.add(lantern);
+    const light = new THREE.PointLight(0xffb347, 1.1, 14, 2);
+    light.position.set(lx, 3.1, lz);
+    scene.add(light);
+    lanternLights.push(light);
+  });
+
+  const hill = new THREE.Mesh(new THREE.ConeGeometry(14, 3, 12), new THREE.MeshLambertMaterial({color:0xd6dfe2}));
+  hill.position.set(46, 1.5, -70);
+  scene.add(hill);
+  const cabinGroup = new THREE.Group();
+  const cabinBody = new THREE.Mesh(new THREE.BoxGeometry(7,4,6), new THREE.MeshLambertMaterial({color:0x4a372a}));
+  cabinBody.position.y = 2;
+  const cabinRoof = new THREE.Mesh(new THREE.ConeGeometry(5.5,2.6,4), new THREE.MeshLambertMaterial({color:0x2e2118}));
+  cabinRoof.rotation.y = Math.PI/4;
+  cabinRoof.position.y = 5.3;
+  const cabinGlow = new THREE.PointLight(0xffb347, 0.8, 10, 2);
+  cabinGlow.position.set(0, 2.5, 3.2);
+  cabinGroup.add(cabinBody, cabinRoof, cabinGlow);
+  cabinGroup.position.set(46, 4.5, -70);
+  scene.add(cabinGroup);
+  const cabinDeliveryPoint = new THREE.Vector3(46, 1.7, -63);
+
+  const lakeMat = new THREE.MeshLambertMaterial({ color: 0x4a6b78, transparent:true, opacity:0.88 });
+  const lake = new THREE.Mesh(new THREE.CircleGeometry(20, 24), lakeMat);
+  lake.rotation.x = -Math.PI/2;
+  lake.position.set(-46, -0.15, -75);
+  scene.add(lake);
+
+  const streamMat = new THREE.MeshLambertMaterial({ color: 0x6f8b96 });
+  const stream = new THREE.Mesh(new THREE.PlaneGeometry(6, 22), streamMat);
+  stream.rotation.x = -Math.PI/2;
+  stream.rotation.z = 0.3;
+  stream.position.set(-16, -0.05, -30);
+  scene.add(stream);
+  const iceMat = new THREE.MeshLambertMaterial({ color: 0xdff3f7, transparent:true, opacity:0.85 });
+  const icePatch = new THREE.Mesh(new THREE.PlaneGeometry(4, 6), iceMat);
+  icePatch.rotation.x = -Math.PI/2;
+  icePatch.rotation.z = 0.3;
+  icePatch.position.set(-16, 0.02, -30);
+  scene.add(icePatch);
+  const iceTaskPos = new THREE.Vector3(-16, 0.5, -30);
+
+  const woodGroup = new THREE.Group();
+  for (let i=0;i<5;i++) {
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,2.2,6), new THREE.MeshLambertMaterial({color:0x6b4a30}));
+    log.rotation.z = Math.PI/2;
+    log.position.set((Math.random()-0.5)*3, 0.35, (Math.random()-0.5)*3);
+    woodGroup.add(log);
+  }
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.6,0.9,8), new THREE.MeshLambertMaterial({color:0x4a3826}));
+  stump.position.set(0, 0.45, -3);
+  woodGroup.add(stump);
+  woodGroup.position.set(0, 0, 5);
+  scene.add(woodGroup);
+  const woodTaskPos = new THREE.Vector3(0, 0.5, 2);
+
+  const campfireSpots = [
+    new THREE.Vector3(-8, 0, 35),
+    new THREE.Vector3(14, 0, -20),
+    new THREE.Vector3(-30, 0, -50),
+  ];
+  const campfireMeshes = campfireSpots.map(pos => {
+    const group = new THREE.Group();
+    const logs = new THREE.Mesh(new THREE.ConeGeometry(0.9,0.6,6), new THREE.MeshLambertMaterial({color:0x3a2c1e}));
+    logs.position.y = 0.3;
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5,1.2,6), new THREE.MeshBasicMaterial({color:0xff7a30}));
+    flame.position.y = 1.0;
+    const fireLight = new THREE.PointLight(0xff7a30, 1.4, 10, 2);
+    fireLight.position.y = 1.2;
+    group.add(logs, flame, fireLight);
+    group.position.copy(pos);
+    group.visible = false;
+    scene.add(group);
+    return { group, flame, fireLight };
+  });
+  let activeCampfireIdx = 0;
+
+  const resourcePositions = [
+    new THREE.Vector3(-20, 0.4, 20), new THREE.Vector3(18, 0.4, 30),
+    new THREE.Vector3(-35, 0.4, -20), new THREE.Vector3(30, 0.4, -45),
+  ];
+  const resourceCrates = resourcePositions.map(pos => {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), new THREE.MeshLambertMaterial({color:0xc9932e}));
+    crate.position.copy(pos);
+    scene.add(crate);
+    return { mesh: crate, pos, collected: false };
+  });
+
+  const bearGroup = new THREE.Group();
+  const bearBody = new THREE.Mesh(new THREE.BoxGeometry(1.6,1.4,2.6), new THREE.MeshLambertMaterial({color:0x3a2e24}));
+  bearBody.position.y = 0.9;
+  const bearHead = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.8,0.9), new THREE.MeshLambertMaterial({color:0x3a2e24}));
+  bearHead.position.set(0, 1.1, 1.5);
+  bearGroup.add(bearBody, bearHead);
+  bearGroup.visible = false;
+  scene.add(bearGroup);
+
+  // ---------- TASKS ----------
+  const tasks = {
+    campfire: { pos: campfireSpots[0], radius: 4, progress:0, fail:0, dormant:false, dormantTimer:0, fillTime:5, el: document.getElementById("obj-campfire") },
+    ice:      { pos: iceTaskPos, radius: 4.5, progress:0, fail:0, dormant:false, dormantTimer:0, fillTime:6, el: document.getElementById("obj-ice") },
+  };
+  let woodStage = "chop";
+  let woodProgress = 0;
+  let woodFail = 0;
+  let woodDormant = false;
+  let woodDormantTimer = 0;
+  const woodEl = document.getElementById("obj-wood");
+  const woodFillTime = 4;
+
+  function nearestTask() {
+    let best = null, bestDist = Infinity;
+    for (const key in tasks) {
+      const t = tasks[key];
+      if (key === "campfire" && !campfireMeshes[activeCampfireIdx].group.visible) continue;
+      const dist = camera.position.distanceTo(t.pos);
+      if (dist < t.radius && dist < bestDist) { best = key; bestDist = dist; }
+    }
+    return best;
+  }
+  function nearWood() { return camera.position.distanceTo(woodTaskPos) < 5; }
+  function nearCabin() { return camera.position.distanceTo(cabinDeliveryPoint) < 6; }
+
+  function setObjectiveLabel(el, state, textOverride) {
+    const span = el.querySelector("span:last-child");
+    el.classList.remove("obj-done", "obj-dormant", "obj-carrying");
+    if (state === "done") { span.textContent = "✓"; el.classList.add("obj-done"); }
+    else if (state === "dormant") { span.textContent = "●"; el.classList.add("obj-dormant"); }
+    else if (state === "carrying") { span.textContent = "🪵"; el.classList.add("obj-carrying"); }
+    else { span.textContent = "○"; }
+    if (textOverride) el.querySelector("span:first-child").textContent = textOverride;
+  }
+
+  function completeTask(key) {
+    const t = tasks[key];
+    t.progress = 0; t.fail = 0; t.dormant = true;
+    const [minD, maxD] = d.dormancy;
+    t.dormantTimer = minD + Math.random()*(maxD-minD);
+    bh = Math.min(100, bh + 6);
+    setObjectiveLabel(t.el, "done");
+    playTaskComplete();
+    if (key === "campfire") { campfireMeshes[activeCampfireIdx].group.visible = false; playFireHiss(); }
+    setTimeout(() => { if (t.dormant) setObjectiveLabel(t.el, "dormant"); }, 1400);
+  }
+
+  function breakTask(key) {
+    const t = tasks[key];
+    t.fail = 0; t.progress = 0;
+    bh -= 7;
+    playTaskBreak();
+    if (key === "campfire") campfireMeshes[activeCampfireIdx].group.visible = true;
+  }
+
+  function respawnCampfire() {
+    activeCampfireIdx = Math.floor(Math.random()*campfireSpots.length);
+    tasks.campfire.pos = campfireSpots[activeCampfireIdx];
+    campfireMeshes.forEach((c,i) => c.group.visible = i === activeCampfireIdx);
+  }
+
+  function completeWood() {
+    woodProgress = 0; woodFail = 0; woodDormant = true;
+    const [minD, maxD] = d.dormancy;
+    woodDormantTimer = minD + Math.random()*(maxD-minD);
+    bh = Math.min(100, bh + 6);
+    woodStage = "chop";
+    setObjectiveLabel(woodEl, "done", "Chop & deliver firewood");
+    playTaskComplete();
+    setTimeout(() => { if (woodDormant) setObjectiveLabel(woodEl, "dormant", "Chop & deliver firewood"); }, 1400);
+  }
+
+  function breakWood() {
+    woodFail = 0; woodProgress = 0; woodStage = "chop";
+    bh -= 7;
+    playTaskBreak();
+    setObjectiveLabel(woodEl, "active", "Chop & deliver firewood");
+  }
+
+  // ---------- STATE ----------
+  let bh = 100;
+  let playerHealth = 100;
+  let hasScent = false;
+  let gameOver = false;
+  let firecrackerCount = 3;
+  let bandageCount = 3;
+  let resourcesFound = 0;
+
+  let bearState = "idle";
+  let roarTimer = 0;
+  let playDeadWindow = false;
+  let playDeadSuccess = false;
+
+  const activeFirecrackers = [];
+
+  // ---------- TOUCH CONTROLS ----------
+  let yaw = Math.PI, pitch = 0;
+  let moveVecX = 0, moveVecY = 0;
+  let interacting = false;
+
+  const joystickZone = document.getElementById("joystick-zone");
+  const joystickBase = document.getElementById("joystick-base");
+  const joystickKnob = document.getElementById("joystick-knob");
+  const lookZone = document.getElementById("look-zone");
+
+  let joyTouchId = null, joyOriginX = 0, joyOriginY = 0;
+  let lookTouchId = null, lookLastX = 0, lookLastY = 0;
+
+  joystickZone.addEventListener("touchstart", (e) => {
+    const t = e.changedTouches[0];
+    joyTouchId = t.identifier;
+    joyOriginX = t.clientX; joyOriginY = t.clientY;
+    joystickBase.style.display = "block";
+    joystickBase.style.left = joyOriginX + "px";
+    joystickBase.style.top = joyOriginY + "px";
+    joystickKnob.style.left = "23px"; joystickKnob.style.top = "23px";
+    ensureAudio();
+    e.preventDefault();
+  }, {passive:false});
+
+  joystickZone.addEventListener("touchmove", (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyTouchId) continue;
+      let dx = t.clientX - joyOriginX;
+      let dy = t.clientY - joyOriginY;
+      const maxR = 42;
+      const dist = Math.min(Math.hypot(dx,dy), maxR);
+      const angle = Math.atan2(dy,dx);
+      dx = Math.cos(angle)*dist; dy = Math.sin(angle)*dist;
+      joystickKnob.style.left = (23+dx) + "px";
+      joystickKnob.style.top = (23+dy) + "px";
+      moveVecX = dx / maxR;
+      moveVecY = dy / maxR;
+    }
+    e.preventDefault();
+  }, {passive:false});
+
+  function endJoystick(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyTouchId) continue;
+      joyTouchId = null;
+      moveVecX = 0; moveVecY = 0;
+      joystickBase.style.display = "none";
+    }
+  }
+  joystickZone.addEventListener("touchend", endJoystick);
+  joystickZone.addEventListener("touchcancel", endJoystick);
+
+  lookZone.addEventListener("touchstart", (e) => {
+    const t = e.changedTouches[0];
+    lookTouchId = t.identifier;
+    lookLastX = t.clientX; lookLastY = t.clientY;
+    e.preventDefault();
+  }, {passive:false});
+
+  lookZone.addEventListener("touchmove", (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookTouchId) continue;
+      const dx = t.clientX - lookLastX;
+      const dy = t.clientY - lookLastY;
+      yaw -= dx * 0.0045;
+      pitch -= dy * 0.0045;
+      pitch = Math.max(-1.2, Math.min(1.2, pitch));
+      lookLastX = t.clientX; lookLastY = t.clientY;
+    }
+    e.preventDefault();
+  }, {passive:false});
+
+  lookZone.addEventListener("touchend", (e) => {
+    for (const t of e.changedTouches) if (t.identifier === lookTouchId) lookTouchId = null;
+  });
+
+  const fixBtn = document.getElementById("fix-btn");
+  fixBtn.addEventListener("touchstart", (e) => { interacting = true; fixBtn.classList.add("pressed"); e.preventDefault(); }, {passive:false});
+  fixBtn.addEventListener("touchend", (e) => { interacting = false; fixBtn.classList.remove("pressed"); });
+  fixBtn.addEventListener("touchcancel", (e) => { interacting = false; fixBtn.classList.remove("pressed"); });
+
+  const firecrackerBtn = document.getElementById("firecracker-btn");
+  firecrackerBtn.addEventListener("touchstart", (e) => { throwFirecracker(); firecrackerBtn.classList.add("pressed"); e.preventDefault(); }, {passive:false});
+  firecrackerBtn.addEventListener("touchend", (e) => { firecrackerBtn.classList.remove("pressed"); });
+
+  const bandageBtn = document.getElementById("bandage-btn");
+  bandageBtn.addEventListener("touchstart", (e) => { useBandage(); bandageBtn.classList.add("pressed"); e.preventDefault(); }, {passive:false});
+  bandageBtn.addEventListener("touchend", (e) => { bandageBtn.classList.remove("pressed"); });
+
+  const playDeadBtn = document.getElementById("playdead-btn");
+  playDeadBtn.addEventListener("touchstart", (e) => { tryPlayDead(); e.preventDefault(); }, {passive:false});
+
+  function throwFirecracker() {
+    if (gameOver || firecrackerCount <= 0) return;
+    firecrackerCount--;
+    document.getElementById("firecracker-count").textContent = firecrackerCount;
+    const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const dropPos = camera.position.clone().add(forward.multiplyScalar(4));
+    dropPos.y = 0.3;
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,0.4,6), new THREE.MeshLambertMaterial({color:0xcc3333}));
+    mesh.position.copy(dropPos);
+    scene.add(mesh);
+    activeFirecrackers.push({ mesh, fuse: 2.5, pos: dropPos, tickTimer: 0 });
+  }
+
+  function useBandage() {
+    if (gameOver || bandageCount <= 0 || playerHealth >= 100) return;
+    bandageCount--;
+    document.getElementById("bandage-count").textContent = bandageCount;
+    playerHealth = Math.min(100, playerHealth + 40);
+    hasScent = false;
+    document.getElementById("scent-badge").style.display = "none";
+    playHeal();
+  }
+
+  function tryPlayDead() {
+    if (!playDeadWindow) return;
+    playDeadSuccess = true;
+  }
+
+  // ---------- HUD refs ----------
+  const bhValue = document.getElementById("bh-value");
+  const bhFill = document.getElementById("bh-fill");
+  const healthValue = document.getElementById("health-value");
+  const healthFill = document.getElementById("health-fill");
+  const progressWrap = document.getElementById("progress-wrap");
+  const progressFill = document.getElementById("progress-fill");
+  const roarBanner = document.getElementById("roar-banner");
+  const bearStatusEl = document.getElementById("bear-status");
+  const resourceObjEl = document.getElementById("obj-resource");
+
+  function updateHUD() {
+    bhValue.textContent = Math.max(0,Math.round(bh)) + "%";
+    bhFill.style.width = Math.max(0,bh) + "%";
+    healthValue.textContent = Math.max(0,Math.round(playerHealth)) + "%";
+    healthFill.style.width = Math.max(0,playerHealth) + "%";
+    document.getElementById("scent-badge").style.display = hasScent ? "block" : "none";
+
+    let showProgress = false, progressPct = 0;
+    const near = nearestTask();
+    if (near && !gameOver && !tasks[near].dormant) { showProgress = true; progressPct = tasks[near].progress; }
+    else if (!gameOver && !woodDormant) {
+      if (woodStage === "chop" && nearWood()) { showProgress = true; progressPct = woodProgress; }
+      if (woodStage === "carry" && nearCabin()) { showProgress = true; progressPct = woodProgress; }
+    }
+    progressWrap.style.display = showProgress ? "block" : "none";
+    progressFill.style.width = progressPct + "%";
+
+    roarBanner.style.display = playDeadWindow ? "block" : "none";
+    playDeadBtn.style.display = playDeadWindow ? "block" : "none";
+
+    if (bearState !== "idle") {
+      bearStatusEl.style.display = "block";
+      const dist = Math.round(camera.position.distanceTo(bearGroup.position));
+      bearStatusEl.textContent = "🐻 " + dist + "m away";
+    } else {
+      bearStatusEl.style.display = "none";
+    }
+
+    resourceObjEl.querySelector("span:first-child").textContent = "Find resources (" + resourcesFound + "/4)";
+  }
+
+  function endRun(won) {
+    gameOver = true;
+    document.getElementById("gameover-screen").style.display = "flex";
+    document.getElementById("gameover-title").textContent = won ? "🏆 Survived" : "💀 Biome Collapsed";
+    document.getElementById("gameover-text").textContent = won ? "You kept the ecosystem alive." : "The ecosystem couldn't be sustained.";
+  }
+
+  function onCobblePath() {
+    const p = camera.position;
+    return Math.abs(p.x) < 3.5 && p.z > 10;
+  }
+
+  let footstepTimer = 0;
+  let windTimer = 0;
+
+  // ---------- MAIN LOOP ----------
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+
+    lanternLights.forEach(l => { l.intensity = 1.0 + Math.sin(performance.now()*0.003 + l.position.x) * 0.15; });
+    campfireMeshes.forEach(c => {
+      if (c.group.visible) {
+        c.flame.scale.y = 1 + Math.sin(performance.now()*0.01)*0.15;
+        c.fireLight.intensity = 1.2 + Math.sin(performance.now()*0.02)*0.3;
+      }
+    });
+
+    if (gameOver) { renderer.render(scene, camera); return; }
+
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    const speed = 11 * dt;
+    const forwardVec = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const rightVec = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    let moveVec = new THREE.Vector3();
+    moveVec.add(forwardVec.clone().multiplyScalar(-moveVecY));
+    moveVec.add(rightVec.clone().multiplyScalar(moveVecX));
+    const magnitude = Math.hypot(moveVecX, moveVecY);
+    const isMoving = magnitude > 0.05;
+    if (isMoving) { moveVec.normalize().multiplyScalar(speed * Math.min(1, magnitude*1.4)); camera.position.add(moveVec); }
+    camera.position.x = Math.max(-70, Math.min(70, camera.position.x));
+    camera.position.z = Math.max(-95, Math.min(95, camera.position.z));
+    camera.position.y = 1.7;
+
+    if (isMoving) {
+      footstepTimer -= dt;
+      if (footstepTimer <= 0) {
+        footstepTimer = 0.4;
+        onCobblePath() ? playFootstepCobble() : playFootstepSnow();
+      }
+    }
+    windTimer -= dt;
+    if (windTimer <= 0) { windTimer = 2 + Math.random()*2; playWind(); }
+
+    resourceCrates.forEach(r => {
+      if (r.collected) return;
+      if (camera.position.distanceTo(r.pos) < 2.4) {
+        r.collected = true; r.mesh.visible = false; resourcesFound++;
+        bh = Math.min(100, bh + 4);
+        playPickup();
+      }
+    });
+
+    const near = nearestTask();
+    for (const key in tasks) {
+      const t = tasks[key];
+      if (key === "campfire" && !campfireMeshes[activeCampfireIdx].group.visible && !t.dormant) continue;
+      if (t.dormant) {
+        t.dormantTimer -= dt;
+        if (t.dormantTimer <= 0) {
+          t.dormant = false;
+          setObjectiveLabel(t.el, "active");
+          if (key === "campfire") respawnCampfire();
+        }
+        continue;
+      }
+      if (t.progress === 0 && t.fail === 0 && key !== near) continue;
+      t.fail += d.taskFail * dt * (3 / (t.fillTime/6));
+      if (key === near && interacting) {
+        const gain = (100 / t.fillTime) * dt;
+        t.progress = Math.min(100, t.progress + gain);
+        t.fail = Math.max(0, t.fail - gain*1.3);
+        if (key === "ice") icePatch.material.opacity = 0.85 * (1 - t.progress/100);
+        if (t.progress >= 100) completeTask(key);
+      }
+      if (t.fail >= 100) breakTask(key);
+    }
+
+    if (!woodDormant) {
+      if (woodStage === "carry") woodFail += d.taskFail * dt * 0.5;
+      else woodFail += d.taskFail * dt * (3 / (woodFillTime/6));
+
+      if (woodStage === "chop" && nearWood() && interacting) {
+        const gain = (100/woodFillTime) * dt;
+        woodProgress = Math.min(100, woodProgress + gain);
+        woodFail = Math.max(0, woodFail - gain*1.3);
+        if (Math.random() < 0.3) playChop();
+        if (woodProgress >= 100) { woodProgress = 0; woodStage = "carry"; setObjectiveLabel(woodEl, "carrying", "Deliver firewood to cabin"); }
+      } else if (woodStage === "carry" && nearCabin() && interacting) {
+        const gain = (100/2.5) * dt;
+        woodProgress = Math.min(100, woodProgress + gain);
+        if (woodProgress >= 100) completeWood();
+      }
+      if (woodFail >= 100) breakWood();
+    } else {
+      woodDormantTimer -= dt;
+      if (woodDormantTimer <= 0) { woodDormant = false; setObjectiveLabel(woodEl, "active", "Chop & deliver firewood"); }
+    }
+
+    bh -= d.decay * dt;
+    if (bh <= 0) { bh = 0; endRun(false); }
+
+    for (let i=activeFirecrackers.length-1; i>=0; i--) {
+      const fc = activeFirecrackers[i];
+      fc.fuse -= dt; fc.tickTimer -= dt;
+      if (fc.tickTimer <= 0) { fc.tickTimer = 0.3; playFuseTick(); }
+      if (fc.fuse <= 0) {
+        playFirecrackerPop();
+        if (bearState !== "idle" && bearGroup.position.distanceTo(fc.pos) < 16) {
+          bearState = "distracted";
+          playDeadWindow = false;
+          setTimeout(() => { if (bearState === "distracted") bearState = "idle"; }, 5000);
+        }
+        scene.remove(fc.mesh);
+        activeFirecrackers.splice(i,1);
+      }
+    }
+
+    const isChoppingNow = woodStage === "chop" && nearWood() && interacting;
+    if (bearState === "idle") {
+      bearGroup.visible = false;
+      let chance = d.roarChance * dt * 10;
+      if (isChoppingNow) chance *= d.noiseBoost;
+      if (hasScent) chance *= 1.6;
+      if (Math.random() < chance) {
+        bearState = "stalking";
+        bearGroup.visible = true;
+        const angle = Math.random()*Math.PI*2;
+        bearGroup.position.set(camera.position.x + Math.cos(angle)*26, 0, camera.position.z + Math.sin(angle)*26);
+      }
+    } else if (bearState === "stalking") {
+      const toPlayer = new THREE.Vector3().subVectors(camera.position, bearGroup.position);
+      toPlayer.y = 0;
+      let approachSpeed = d.bearSpeed;
+      if (isChoppingNow) approachSpeed *= 1.3;
+      if (hasScent) approachSpeed *= 1.2;
+      const dist = toPlayer.length();
+      if (dist > 0.1) {
+        toPlayer.normalize();
+        bearGroup.position.add(toPlayer.multiplyScalar(approachSpeed * dt));
+        bearGroup.lookAt(camera.position.x, 0, camera.position.z);
+      }
+      if (dist <= 9) {
+        bearState = "roaring"; roarTimer = 1.5;
+        playDeadWindow = true; playDeadSuccess = false;
+        playRoar();
+      }
+    } else if (bearState === "roaring") {
+      roarTimer -= dt;
+      if (roarTimer <= 0) {
+        playDeadWindow = false;
+        if (playDeadSuccess) {
+          bearState = "retreating";
+          setTimeout(() => { if (bearState === "retreating") bearState = "idle"; }, 3000);
+        } else {
+          playerHealth -= 30; hasScent = true; playHurt();
+          bearState = "retreating";
+          setTimeout(() => { if (bearState === "retreating") bearState = "idle"; }, 3000);
+          if (playerHealth <= 0) { playerHealth = 0; endRun(false); }
+        }
+      }
+    } else if (bearState === "retreating") {
+      bearGroup.visible = true;
+      const away = new THREE.Vector3().subVectors(bearGroup.position, camera.position).normalize();
+      bearGroup.position.add(away.multiplyScalar(d.bearSpeed*1.2*dt));
+    } else if (bearState === "distracted") {
+      bearGroup.visible = true;
+    }
+
+    updateHUD();
+    renderer.render(scene, camera);
+  }
+
+  // ---------- START / RESTART ----------
+  document.querySelectorAll(".diff-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".diff-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      diffKey = btn.dataset.diff;
+      d = DIFFICULTY[diffKey];
+    });
+  });
+
+  function resetGame() {
+    bh = 100; playerHealth = 100; hasScent = false; gameOver = false;
+    firecrackerCount = 3; bandageCount = 3; resourcesFound = 0;
+    document.getElementById("firecracker-count").textContent = firecrackerCount;
+    document.getElementById("bandage-count").textContent = bandageCount;
+    bearState = "idle"; bearGroup.visible = false; playDeadWindow = false;
+    for (const key in tasks) {
+      tasks[key].progress = 0; tasks[key].fail = 0; tasks[key].dormant = false; tasks[key].dormantTimer = 0;
+      setObjectiveLabel(tasks[key].el, "active");
+    }
+    woodProgress = 0; woodFail = 0; woodDormant = false; woodStage = "chop";
+    setObjectiveLabel(woodEl, "active", "Chop & deliver firewood");
+    respawnCampfire();
+    icePatch.material.opacity = 0.85;
+    resourceCrates.forEach(r => { r.collected = false; r.mesh.visible = true; });
+    activeFirecrackers.forEach(fc => scene.remove(fc.mesh));
+    activeFirecrackers.length = 0;
+    camera.position.set(0, 1.7, 85);
+    yaw = Math.PI; pitch = 0;
+    document.getElementById("gameover-screen").style.display = "none";
+  }
+
+  document.getElementById("start-btn").addEventListener("click", () => {
+    respawnCampfire();
+    document.getElementById("start-screen").style.display = "none";
+    ensureAudio();
+  });
+  document.getElementById("restart-btn").addEventListener("click", () => {
+    resetGame();
+  });
+
+  animate();
+})();
+</script>
+</body>
+</html>
